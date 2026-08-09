@@ -19,17 +19,17 @@ $VideoIds = @(
 )
 
 $Texts = @{
-    Welcome     = "Welcome, {0}! You're about to see an exclusive free preview.`n`nThese clips are only available for the next $PreviewSeconds seconds - watch closely"
-    Warning     = "10 seconds left before this preview disappears forever..."
-    Unlock      = "That was just a taste.`n`nThere's SO much more waiting for you inside the private channel - way more videos, zero limits, no expiration.`n`nUnlock everything right now before spots run out:"
-    UnlockBtn   = "Unlock Full Access Now"
-    InvoiceTitle = "Premium Channel Access"
+    Welcome      = [char]0x1F525 + " Welcome, {0}! You're about to see an exclusive free preview.`n`nThese clips are only available for the next $PreviewSeconds seconds " + [char]0x2014 + " watch closely " + [char]0x1F447
+    Warning      = [char]0x231B + " 10 seconds left before this preview disappears forever..."
+    Unlock       = "That was just a taste " + [char]0x1F60F + "`n`n" + [char]0x1F525 + " There's SO much more waiting for you inside the private channel " + [char]0x2014 + " way more videos, zero limits, no expiration.`n`n" + [char]0x1F449 + " Unlock everything right now before spots run out:"
+    UnlockBtn    = [char]0x1F512 + " Unlock Full Access Now"
+    InvoiceTitle = [char]0x1F512 + " Premium Channel Access"
     InvoiceDesc  = "Unlock full, unrestricted access to the exclusive content library. Limited spots available."
     InvoiceLabel = "Premium Channel Access"
-    Paid         = "Payment received! Your private access link is ready below."
-    JoinBtn      = "Join private channel"
-    PayError     = "Payment could not be opened right now."
-    AlreadySeen  = "You've already seen the free preview.`n`nReady to unlock everything?"
+    Paid         = [char]0x2705 + " Payment received! Your private access link is ready below."
+    JoinBtn      = [char]0x1F517 + " Join private channel"
+    PayError     = [char]0x274C + " Payment could not be opened right now."
+    AlreadySeen  = [char]0x1F440 + " Welcome back, {0}! You've already seen the free preview.`n`n" + [char]0x1F525 + " Ready for the full experience? Way more content is waiting inside " + [char]0x2014 + " unlock it now " + [char]0x1F447
 }
 
 $PreviewUsed = @{}
@@ -38,7 +38,8 @@ $UserNames = @{}
 function TgPostJson {
     param([string]$Method,[hashtable]$Payload)
     $Json = $Payload | ConvertTo-Json -Depth 20 -Compress
-    Invoke-RestMethod -Uri "$Api/$Method" -Method Post -ContentType "application/json" -Body $Json
+    $Bytes = [System.Text.Encoding]::UTF8.GetBytes($Json)
+    Invoke-RestMethod -Uri "$Api/$Method" -Method Post -ContentType "application/json; charset=utf-8" -Body $Bytes
 }
 
 function GetDisplayName {
@@ -74,7 +75,9 @@ function SendPreviewFlowAsync {
 
         function JobPost {
             param($Method,$Payload)
-            Invoke-RestMethod -Uri "$Api/$Method" -Method Post -ContentType "application/json" -Body (($Payload) | ConvertTo-Json -Depth 20 -Compress)
+            $Json = $Payload | ConvertTo-Json -Depth 20 -Compress
+            $Bytes = [System.Text.Encoding]::UTF8.GetBytes($Json)
+            Invoke-RestMethod -Uri "$Api/$Method" -Method Post -ContentType "application/json; charset=utf-8" -Body $Bytes
         }
 
         try {
@@ -118,10 +121,11 @@ function SendPreviewFlowAsync {
             } | Out-Null
         }
         catch {
+            $ErrMsg = if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
             try {
                 JobPost -Method "sendMessage" -Payload @{
                     chat_id = $OwnerId
-                    text = "Errore nell'invio preview a chat $ChatId : $($_.Exception.Message)"
+                    text = "Errore nell'invio preview a chat $ChatId : $ErrMsg"
                 } | Out-Null
             } catch {}
         }
@@ -184,7 +188,7 @@ while ($true) {
 
                 if ($Text -eq "/start") {
                     if ($PreviewUsed.ContainsKey($ChatId) -and $PreviewUsed[$ChatId] -eq $true) {
-                        SendText -ChatId $ChatId -Text $Texts.AlreadySeen -Keyboard (GetUnlockKeyboard) | Out-Null
+                        SendText -ChatId $ChatId -Text ($Texts.AlreadySeen -f $Name) -Keyboard (GetUnlockKeyboard) | Out-Null
                     }
                     else {
                         $PreviewUsed[$ChatId] = $true
@@ -225,7 +229,8 @@ while ($true) {
                         SendStarsInvoice -ChatId $ChatId
                     }
                     catch {
-                        Write-Host "Errore invoice: $($_.Exception.Message)" -ForegroundColor Red
+                        $ErrMsg = if ($_.ErrorDetails -and $_.ErrorDetails.Message) { $_.ErrorDetails.Message } else { $_.Exception.Message }
+                        Write-Host "Errore invoice: $ErrMsg" -ForegroundColor Red
                         SendText -ChatId $ChatId -Text $Texts.PayError | Out-Null
                     }
                     continue
